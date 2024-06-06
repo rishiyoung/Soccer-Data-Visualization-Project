@@ -1,0 +1,971 @@
+---
+title: "Group 7 Final Project"
+institute: "STAT 27815, University of Chicago"
+author: "Connor Beaudry, Rishi Young, James Jeffs"
+footer: ""
+# logo: files/UChicago_Shield_Crop.png
+format: 
+  revealjs: 
+    highlight-style: files/mcshanepdf.theme
+    code-overflow: wrap
+    slide-number: c/t
+    width: 1920
+    height: 1080
+    code-block-height: 1000px
+    margin: 0.07
+    # multiplex: true
+    code-annotations: true
+    # transition: fade
+    incremental: true 
+    # chalkboard: true
+execute:
+  freeze: auto
+  echo: true
+knitr:
+  opts_chunk: 
+    R.options:
+      width: 250
+      theme: minty
+---
+
+```{r setup, echo = FALSE, warning = FALSE}
+knitr::opts_chunk$set(
+  size = 'footnotesize', 
+  comment=NA,
+  collapse =TRUE
+)
+library(kableExtra)
+library(formatR)
+library(tidyverse)
+library(readr)
+library(readxl)
+library(googlesheets4)
+library(jsonlite)
+library(haven)
+library(tidyr)
+library(dplyr)
+library(reshape2)
+library(scales)
+library(ggridges)
+library(worldfootballR)
+
+kable = function(x, 
+  booktabs = TRUE, align = "c", format, digits = getOption("digits"), 
+  row.names = NA, col.names = NA, caption = NULL, label = NULL, 
+  format.args = list(), escape = TRUE, full_width = NULL, 
+  bootstrap_options = "basic", position = "center", 
+  latex_options = c("HOLD_position", "repeat_headers"), font_size = NULL, 
+  row_label_position = "l", ...) {
+    knitr::kable(x, 
+      booktabs = booktabs, align = align, format = format, digits = digits, 
+      row.names = row.names, col.names = col.names, caption = caption, 
+      label = label, format.args = format.args, escape = escape, ...
+    ) |>
+    kableExtra::kable_styling(
+      full_width = full_width, bootstrap_options = bootstrap_options, 
+      position = position, latex_options = latex_options, font_size = font_size, 
+      row_label_position = row_label_position, ...
+    )
+}
+
+###########
+# For improving ggplot2 appearance on a projector screen
+ggplot2::theme_set(ggplot2::theme_bw())
+ggplot2::theme_update(panel.grid.major = ggplot2::element_line(colour = "grey75"))
+```
+
+## Topic and Data Collection
+
+:::: {.columns}
+
+::: {.column width="50%"}
+
+::: {.fragment}
+```{r}
+#| echo: false
+#| out-width: 50%
+#| fig-align: center
+knitr::include_graphics("images/epl_logo.png")
+```
+:::
+
+::: {.fragment}
+```{r}
+#| echo: false
+#| out-width: 50%
+#| fig-align: center
+knitr::include_graphics("images/worldfootballr.png")
+```
+:::
+
+:::
+
+::: {.column width="50%"}
+
+::: {.fragment}
+
+### What are the main questions that this presentation intends to address?
+
+:::
+
+* What is the  effect of `Home Team Advantage` on scoring and match outcome?
+* Does being the away or home team affect how the game is played?
+* Does distance traveled by the away team effect how well they play?
+
+::: {.fragment}
+
+### Data Collection
+
+:::
+
+* [worldfootballr](https://github.com/JaseZiv/worldfootballR?tab=readme-ov-file) is an r package made by `Jason Zivkovic`.
+  * It contains functions for scraping data from [FBRef](https://fbref.com/en/), [Transfermarkt](https://www.transfermarkt.us/), and [Understat](https://understat.com/).
+  * These websites provide info from all major soccer leagues on match summaries, results, shooting data and more as well as player/team data.
+
+:::
+::::
+
+
+## Comparing Different League Statistics
+
+* Let us first analyze whether there is significant difference between leagues.
+
+* In order to do so, we will scrape data for seasons 2016-2017 through 2022-2023 for 5 major leagues: the EPL, La Liga, Ligue 1, Bundesliga, and MLS.
+
+::: {.fragment}
+```{r}
+#| code-line-numbers: "|7|13|22"
+options(width = 80)
+library(worldfootballR)
+
+pull_league_data = function(countries) {
+  output = data.frame()
+  for(country in countries){
+    new = fb_match_results(
+      country = country,
+      gender = "M",
+      season_end_year = c(2017:2023),
+      tier = "1st"
+      )
+    output = rbind(output, new)
+  }
+  output = output |>
+    select(Country, Season_End_Year, Home, HomeGoals, Away, AwayGoals) |>
+    mutate(TotalGoals = HomeGoals + AwayGoals)
+  
+  return(output)
+}
+
+League_Comparison = pull_league_data(c("ENG", "ESP", "FRA", "GER", "USA"))
+```
+:::
+
+## Comparing Different League Statistics
+
+```{r, echo=FALSE}
+#| fig-align: center
+#| out-width: "100%"
+League_Comparison[sample(1:13173, 10),] |>
+  kable()
+```
+
+## Comparing Different League Statistics
+
+Using this data, we make a couple basic visualizations:
+
+::: {.fragment}
+```{r}
+#| output-location: column-fragment
+
+League_Comparison |>
+ggplot(aes(x = TotalGoals, y = Country, height = stat(density), fill = Country)) +
+  geom_density_ridges(stat = "binline", bins = 21) +
+  guides(fill = "none") +
+  labs(x = "Total Goals Scored", y = "Country (Top League)", title = "Total Goals Scored By League/Country") +
+  expand_limits(y = 7) +
+  scale_x_continuous(breaks = 0:10) +
+  theme_bw(base_size = 20)
+```
+:::
+
+::: {.fragment}
+```{r}
+#| output-location: column-fragment
+#| 
+League_Comparison |>
+ggplot(aes(x = AwayGoals, y = Country, height = stat(density), fill = Country)) +
+  geom_density_ridges(stat = "binline", bins = 21) +
+  guides(fill = "none") +
+  labs(x = "Away Goals Scored", y = "Country (Top League)", title = "Away Goals Scored By League/Country") +
+  expand_limits(y = 7) +
+  scale_x_continuous(breaks = 0:6, limits = c(-1, 7)) +
+  theme_bw(base_size = 20)
+```
+:::
+
+## Comparing Different League Statistics
+
+::: {.fragment}
+```{r}
+#| output-location: column-fragment
+library(GGally)
+League_Comparison |>
+  ggplot(mapping = aes(x = TotalGoals, y = factor(Season_End_Year), fill =  factor(Season_End_Year), height = stat(density))) +
+  geom_density_ridges(stat = "binline", bins = 21) +
+  guides(fill = "none") +
+  labs(y = "Year", x = "Total Goals Scored", title = "Total Goals Scored By Year (All Leagues)") +
+  expand_limits(y = 9) +
+  scale_x_continuous(breaks = 0:10) +
+  theme_bw(base_size = 20)
+```
+:::
+
+
+# The English Premier League
+
+## The English Premier League
+
+* Making a map of **The English Premier League** (EPL):
+
+::: {.fragment}
+```{r, eval=FALSE}
+#| echo: TRUE
+#| width: 100
+#| code-line-numbers: "|6|7-13|16-17|23-26|27-32"
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(rnaturalearthhires)
+library(ggrepel)
+
+locations_2023 = read_csv(file = "data/Team Stadium Locations EPL 2023.csv", show_col_types = FALSE)
+UK_map = ne_states(country = "United Kingdom", returnclass = "sf")
+counties = c("Newcastle upon Tyne", "Leeds", "Manchester", "Liverpool",
+             "Wolverhampton", "Nottingham", "Leicester", "Birmingham",
+             "Southampton", "Bournemouth", "Brighton and Hove",
+             "Islington", "Hounslow", "Haringey", "Hammersmith and Fulham",
+             "Newham", "Croydon")
+UK_map_teams = filter(UK_map, name %in% counties)
+
+ggplot(data = UK_map) +
+  geom_sf(fill = "whitesmoke") +
+  geom_sf(data = UK_map_teams, fill = "blue", alpha = 0.4) +
+  theme_bw(base_size = 30) +
+  theme(axis.title = element_text(size = 30),
+        legend.title = element_text(size = 22),
+        legend.key.size = unit(40, "pt"),
+        plot.title = element_text(size = 40)) +
+  geom_point(data = locations_2023, aes(x = Latitude, 
+                                        y = Longitude, 
+                                        color = Standing), 
+             size = 3) +
+  geom_text_repel(data = locations_2023, 
+                  aes(x = Latitude, 
+                      y = Longitude, 
+                      color = Standing,  
+                      label = `Team Name`), 
+                  size = 7, max.overlaps = 15, force = 2) +
+  scale_colour_gradient(low = "forestgreen", high = "red", 
+                        guide = guide_colorbar(reverse = TRUE)) +
+  coord_sf(xlim = c(-6, 2), ylim = c(50, 56), expand = FALSE) +
+  labs(title = "English Premier League Teams", 
+       color = "2023 Standing")
+```
+:::
+
+::: {.fragment}
+_Stadium coordinate data was acquired manually from the EPL website._
+:::
+
+## The English Premier League
+
+```{r}
+#| echo: false
+#| out-width: "50%"
+#| fig-align: center
+knitr::include_graphics("images/EPL_map.png")
+```
+
+## Home Team Advantage
+
+* We will begin our analysis of the EPL 2022-23 season by determining how much of an advantage the home team gets.
+
+:::: {.columns}
+::: {.column width="50%"}
+
+::: {.fragment}
+```{r}
+library(ggridges)
+options(width = 100)
+results <- understat_league_match_results(league = "EPL", 
+                                          season_start_year = 2022)
+results <- results |>
+  rename(`Home Win Probability` = forecast_win,
+         `Draw Probability` = forecast_draw,
+         `Away Win Probability` = forecast_loss)
+
+long_data <- pivot_longer(
+  results, 
+  cols = c(`Home Win Probability`, 
+           `Draw Probability`, 
+           `Away Win Probability`),
+  names_to = "Prediction", 
+  values_to = "probability"
+)
+
+long_data$Prediction <- factor(
+  long_data$Prediction,
+  levels = c("Home Win Probability", 
+             "Draw Probability", 
+             "Away Win Probability")
+)
+```
+:::
+:::
+
+::: {.column width="50%"}
+
+::: {.fragment}
+```{r}
+#| eval: false
+ggplot(long_data, aes(x = probability, y = Prediction, 
+                      fill = Prediction, color = Prediction)) +
+  geom_density_ridges(
+    alpha = 0.4, 
+    rel_min_height = 0.01,
+    quantile_lines = TRUE, 
+    quantiles = c(0.25, 0.5, 0.75)
+  ) +
+  labs(
+    title = "Match Outcome Prediction",
+    x = "Probability",
+    y = "Prediction"
+  ) +
+  scale_fill_manual(
+    values = c(`Home Win Probability` = "#04f5ff", 
+               `Draw Probability` = "#00ff85",
+               `Away Win Probability` = "#e90052"),
+    labels = c("Home Win", "Draw", "Away Win")
+  ) +
+  scale_color_manual(
+    values = c(`Home Win Probability` = "#04f5ff", 
+               `Draw Probability` = "#00ff85", 
+               `Away Win Probability` = "#e90052"),
+    labels = c("Home Win", "Draw", "Away Win")
+  ) +
+  theme_ridges() +
+  theme(
+    plot.title = element_text(hjust = 0.5, margin = margin(b = 20), size = 40),
+    axis.title.x = element_text(hjust = 0.5, margin = margin(t = 10), size = 30),
+    axis.title.y = element_text(hjust = 0.5, margin = margin(r = 10), size = 30),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  theme_bw(base_size = 30)
+```
+:::
+:::
+::::
+
+## Home Team Advantage
+
+```{r}
+#| echo: false
+#| out-width: "25%"
+#| fig-align: center
+knitr::include_graphics("images/match_outcome_prediction.png")
+```
+
+## Away Team Travel Effect
+
+:::: {.columns}
+::: {.column width="50%"}
+
+* Data on the travel distance of Premier League clubs in the 2022-23 season was acquired from [footballteamnews](https://www.footballteamnews.com/travel-distances?tournament=44&season=2022/2023).
+
+::: {.fragment}
+```{r}
+distances <- read_csv("data/England_Distances - 2023.csv")
+```
+:::
+:::
+
+::: {.column width="50%"}
+
+::: {.fragment}
+```{r}
+find_distance <- function(home_team, away_team, distance_matrix) {
+  teams <- colnames(distance_matrix)[2:21]
+  home_index <- which(teams == home_team)
+  away_index <- which(teams == away_team)
+  if(length(home_index) > 0 && length(away_index) > 0) {
+    return(pull(distance_matrix[home_index, away_index + 1]))
+  } else {
+    return(NA)
+  }
+}
+modified_results <- results |> 
+  rowwise() |> 
+  mutate(
+    Distance_Travelled = find_distance(home_team, 
+                                       away_team, distances),
+    Away_Goal_Diff = away_goals - home_goals
+  ) |>
+  ungroup() 
+```
+:::
+
+:::
+
+::::
+
+
+## Away Team Travel Effect
+
+* Data was filtered to include games that did not have a high probability of the away team winning.
+
+::: {.fragment}
+```{r}
+#| output-location: column-fragment
+filtered_results <- modified_results |>
+  filter(`Away Win Probability` < 0.6)
+
+ggplot(filtered_results, aes(x = Distance_Travelled, 
+                             y = Away_Goal_Diff)) +
+  geom_jitter(aes(color = `Away Win Probability`), size = 3, 
+                  width = 0.2, height = 0.2) + 
+    scale_color_gradient2(low = "#00ff85", 
+                          mid = "orange", 
+                          high = "#e90052", 
+                          midpoint = 0.3,
+                          name = "Probability of Away Win") +
+  geom_hline(yintercept = 0, color = "#38003c") +
+  labs(title = "Scatter Plot of Away Goal Difference vs Distance Travelled",
+       x = "Distance Travelled (km)",
+       y = "Away Goal Difference") +
+  theme_minimal(base_size = 30)
+```
+:::
+
+
+# Away Team Effect on Shotstyle
+
+## Away Team Effect on Shotstyle
+
+* Analyzing the effects of being the away team on shooting:
+
+::: {.fragment}
+```{r}
+#| width: 100
+EPL_Shots <- understat_league_season_shots(league = "EPL", season_start_year = 2022)
+```
+:::
+
+::: {.fragment}
+```{r, echo=FALSE}
+#| out-width: "50%"
+#| fig-align: center
+EPL_Colors <- c("#04f5ff", "#e90052", "#ffffff", "#00ff85", "#38003c")
+EPL_shots_organized = EPL_Shots[sample(1:9644, 10), ] |>
+  relocate(c(X, Y, xG, h_a, home_team, away_team))
+EPL_shots_organized |> 
+  kable()
+```
+:::
+
+## Away Team Effect on Shotstyle
+
+* To create a proper heat-map, we need to wrangle our data into the proper shape:
+
+:::: {.columns}
+::: {.column width="50%"}
+
+::: {.fragment}
+
+```{r}
+create_heatmap_data <- function(data) {
+  x_breaks <- seq(0.65, 1, by = 0.025)
+  y_breaks <- seq(0.35, 0.65, by = 0.025)
+  grid <- expand.grid(xmin = head(x_breaks, -1),
+                      xmax = tail(x_breaks, -1),
+                      ymin = head(y_breaks, -1),
+                      ymax = tail(y_breaks, -1))
+  heatmap_data <- grid |>
+    rowwise() |>
+    mutate(shot_count = sum(data$X >= xmin & data$X < xmax & data$Y >= ymin &
+                              data$Y < ymax),
+           goal_count = sum(data$X >= xmin & data$X < xmax & data$Y >= ymin & 
+                              data$Y < ymax & data$result == "Goal"),
+           goal_percentage = ifelse(shot_count > 0,
+                                    (goal_count / shot_count), 0)) |>
+        ungroup()
+  return(heatmap_data)
+}
+```
+:::
+:::
+
+::: {.column width="50%"}
+
+::: {.fragment}
+
+```{r}
+home_shots <- EPL_Shots |> filter(h_a == "h")
+away_shots <- EPL_Shots |> filter(h_a == "a")
+home_shots_filtered <- home_shots |>
+  filter(X >= 0.65 & X <= 1, Y >= 0.35 & Y <= 0.65)
+
+away_shots_filtered <- away_shots |>
+  filter(X >= 0.65 & X <= 1, Y >= 0.35 & Y <= 0.65)
+
+home_heatmap_data <- create_heatmap_data(home_shots_filtered)
+away_heatmap_data <- create_heatmap_data(away_shots_filtered)
+home_heatmap_data <- home_heatmap_data |>
+  rename(home_goal_percentage = goal_percentage)
+away_heatmap_data <- away_heatmap_data |>
+  rename(away_goal_percentage = goal_percentage)
+merged_data <- full_join(
+  home_heatmap_data, 
+  away_heatmap_data, 
+  by = c("xmin", "xmax", "ymin", "ymax")
+)
+merged_data <- merged_data |>
+  mutate(
+    goal_percentage_diff = coalesce(home_goal_percentage, 0) -
+                           coalesce(away_goal_percentage, 0)
+  )
+goal_percentage_diff_data <- merged_data |>
+  select(xmin, xmax, ymin, ymax, home_goal_percentage, 
+         away_goal_percentage, goal_percentage_diff)
+```
+:::
+:::
+
+::::
+
+## Away Team Effect on Shotstyle
+
+* Then we make the heat-map function for the percentage of shots that are made:
+
+:::: {.columns}
+
+::: {.column width="50%"}
+
+::: {.fragment}
+
+```{r}
+create_heatmap_plot <- function(data, title, colors, values) {
+  data <- data |>
+    mutate(
+      x = (xmin + xmax) / 2,
+      y = (ymin + ymax) / 2
+    )
+
+  ggplot(data, aes(x = x, y = y)) +
+    geom_tile(aes(fill = goal_percentage_diff), color = "white") +
+    scale_fill_gradientn(
+      colors = colors,
+      limits = c(-0.3, 0.3),
+      name = "Goal % Difference"
+    ) +
+    geom_segment(
+      aes(x = 0.82, xend = 0.82, y = 0.35, yend = 0.65),
+      color = "black", linewidth = 0.75
+    ) +
+    geom_segment(
+      aes(x = 0.94, xend = 1, y = 0.5458, yend = 0.5458),
+      color = "black", linewidth = 0.75
+    ) +
+    geom_segment(
+      aes(x = 0.94, xend = 1, y = 0.4542, yend = 0.4542),
+      color = "black", linewidth = 0.75
+    ) +
+    geom_segment(
+      aes(x = 0.94, xend = 0.94, y = 0.5458, yend = 0.4542),
+      color = "black", linewidth = 0.75
+    ) +
+    labs(title = title) +
+    theme_minimal(base_size = 25) +
+    theme(
+      panel.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      plot.title = element_text(hjust = 0.5)
+    ) +
+    coord_fixed(ratio = 1) +
+    ylim(0.35, 0.65) +
+    xlim(0.75, 1)
+}
+```
+:::
+:::
+
+::: {.column width="50%"}
+
+::: {.fragment}
+
+```{r}
+goal_percentage_diff_range <- range(goal_percentage_diff_data$goal_percentage_diff, na.rm = TRUE)
+
+p_colors <- c("black", EPL_Colors[5], EPL_Colors[2], EPL_Colors[3], 
+              EPL_Colors[4], EPL_Colors[1], "blue")
+p_values <- c(-0.3, -0.1, -0.05, 0, 0.05, 0.1, 0.3)
+```
+:::
+
+:::
+
+::::
+
+## Away Team Effect on Shotstyle
+
+::: {.fragement}
+
+```{r}
+#| echo: false
+#| out-width: "50%"
+#| fig-align: center
+knitr::include_graphics("images/heatmap_goals.png")
+```
+
+:::
+
+## Away Team Effect on Shotstyle
+
+* Using a similar function, we can produce the heat-maps for the number of shots taken:
+
+:::: {.columns}
+
+::: {.column width="50%"}
+
+::: {.fragment}
+```{r}
+#| fig-align: center
+create_shot_heatmap_data <- function(data) {
+  x_breaks <- seq(0.65, 1, by = 0.025)
+  y_breaks <- seq(0.35, 0.65, by = 0.025)
+  grid <- expand.grid(xmin = head(x_breaks, -1),
+                      xmax = tail(x_breaks, -1),
+                      ymin = head(y_breaks, -1),
+                      ymax = tail(y_breaks, -1))
+  heatmap_data <- grid |>
+    rowwise() |>
+    mutate(shot_count = sum(data$X >= xmin & data$X < xmax & data$Y >= ymin & data$Y < ymax)) |>
+    ungroup()
+  
+  return(heatmap_data)
+}
+
+home_shots_filtered <- home_shots |> filter(X >= 0.65 & X <= 1) |> filter(Y >= 0.35 & Y <= 65)
+away_shots_filtered <- away_shots |> filter(X >= 0.65 & X <= 1) |> filter(Y >= 0.35 & Y <= 0.65)
+home_shot_heatmap_data <- create_shot_heatmap_data(home_shots_filtered)
+away_shot_heatmap_data <- create_shot_heatmap_data(away_shots_filtered)
+mean_shot_count <- mean(home_shot_heatmap_data$shot_count)
+sd_shot_count <- sd(home_shot_heatmap_data$shot_count)
+shot_count_colors <- c("white", "yellow", "orange","red")
+```
+:::
+:::
+
+::: {.column width="50%"}
+
+::: {.fragment}
+```{r}
+create_shot_heatmap_plot <- function(data, title, colors) {
+  data <- data |>
+    mutate(x = (xmin + xmax) / 2,
+           y = (ymin + ymax) / 2)
+
+  ggplot(data, aes(x = x, y = y)) +
+    geom_tile(aes(fill = shot_count), color = "white") +
+    scale_fill_gradientn(
+      colors = colors,
+      values = scales::rescale(c(0, 1, 2, 3)),
+      limits = c(0, 5000),
+      breaks = seq(0, 5000, by = 1000),
+      name = "Shot Count"
+    ) +
+    labs(title = title) +
+    geom_segment(aes(x = 0.82, xend = 0.82, y = 0.35, yend = 0.65),
+                 color = "black", size = 0.75) +
+    geom_segment(aes(x = 0.94, xend = 1, y = 0.5458, yend = 0.5458),
+                 color = "black", size = 0.75) +
+    geom_segment(aes(x = 0.94, xend = 1, y = 0.4542, yend = 0.4542),
+                 color = "black", size = 0.75) +
+    geom_segment(aes(x = 0.94, xend = 0.94, y = 0.5458, yend = 0.4542),
+                 color = "black", size = 0.75) +
+    coord_fixed(ratio = 1) +
+    theme_minimal(base_size = 25) +
+    theme(
+      panel.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      plot.title = element_text(hjust = 0.5)
+    )
+}
+```
+:::
+:::
+
+::::
+
+## Away Team Effect on Shotstyle
+
+:::: {.columns}
+
+::: {.column width="50%"}
+
+* For home teams:
+
+::: {.fragment}
+```{r}
+#| echo: false
+#| out-width: "80%"
+#| fig-align: center
+knitr::include_graphics("images/heatmap_shots_home.png")
+```
+:::
+:::
+
+::: {.column width="50%"}
+
+* For away teams:
+
+::: {.fragment}
+```{r}
+#| echo: false
+#| out-width: "80%"
+#| fig-align: center
+knitr::include_graphics("images/heatmap_shots_away.png")
+```
+:::
+:::
+
+::::
+
+# Home-Away Points Breakdown
+
+## Home-Away Points Breakdown
+
+* In soccer, a team's points over the season are calculated as `three times their number of wins plus their number of draws`.
+* We will now compare the number of points earned at home games vs away games:
+
+::: {.fragment}
+
+```{r}
+#| width: 100
+games <- results |>
+  select(home_team, away_team, home_goals, away_goals) |>
+  distinct()
+unique_games <- results |>
+  select(home_team, away_team, home_goals, away_goals) |>
+  distinct()
+unique_games <- unique_games |>
+  mutate(
+    home_points = if_else(home_goals > away_goals, 3, if_else(home_goals == away_goals, 1, 0)),
+    away_points = if_else(away_goals > home_goals, 3, if_else(away_goals == home_goals, 1, 0))
+  )
+```
+:::
+
+## Home-Away Points Breakdown
+
+Some more data manipulation:
+
+::: {.fragment}
+
+```{r}
+#| width: 100
+home_points_df <- unique_games |>
+  group_by(home_team) |>
+  summarize(home_points = sum(home_points, na.rm = TRUE)) |>
+  rename(team = home_team)
+away_points_df <- unique_games |>
+  group_by(away_team) |>
+  summarize(away_points = sum(away_points, na.rm = TRUE)) |>
+  rename(team = away_team)
+team_points_df <- full_join(home_points_df, away_points_df, by = "team")
+team_points_df <- team_points_df |>
+  mutate(
+    home_points = replace_na(home_points, 0),
+    away_points = replace_na(away_points, 0),
+    total_points = home_points + away_points,
+    proportion = home_points / away_points,
+    half_points = total_points / 2
+  )
+team_points_df <- team_points_df |>
+  mutate(proportion = ifelse(is.infinite(proportion), NA, proportion))
+team_points_df <- team_points_df |>
+  arrange(desc(proportion))
+```
+:::
+
+## Home-Away Points Breakdown
+
+* The proportion of points won at home games to those won at away games:
+
+::: {.fragment}
+
+```{r}
+#| eval: false
+team_points_df <- team_points_df |>
+  arrange(desc(total_points))  |>
+mutate(team = ifelse(team == "Wolverhampton Wanderers", "Wolves", team)) 
+
+team_points_df <- team_points_df |>
+  arrange(desc(total_points))
+long_team_points_df <- team_points_df |>
+  pivot_longer(cols = c(home_points, away_points), 
+               names_to = "type", values_to = "points")
+long_team_points_df$team <- factor(long_team_points_df$team, 
+                                   levels = team_points_df$team)
+
+ggplot(long_team_points_df, aes(x = team, y = points, fill = type)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = half_points, ymax = half_points), 
+                width = 0.9, color = "black") +
+  scale_fill_manual(values = c("home_points" = "#04f5ff", 
+                               "away_points" = "#e90052"),
+                    labels = c("home_points" = "Home Points", 
+                               "away_points" = "Away Points")) +
+  labs(
+    title = "Home vs Away Points by Team",
+    x = "Team Name",
+    y = "Total Points",
+    fill = "Points Type"
+  ) +
+  theme_bw(base_size = 25) +
+  theme(axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA))
+```
+:::
+
+## Home-Away Points Breakdown
+
+::: {.fragment}
+```{r}
+#| echo: false
+#| out-width: "80%"
+#| fig-align: center
+knitr::include_graphics("images/home_away_points.png")
+```
+:::
+
+# Salary Analysis
+
+## Salary Data
+
+```{r, echo = FALSE}
+arsenal = "https://fbref.com/en/squads/18bb7c10/2022-2023/Arsenal-Stats"
+aston_villa = "https://fbref.com/en/squads/8602292d/2022-2023/Aston-Villa-Stats"
+bournemouth = "https://fbref.com/en/squads/4ba7cbea/2022-2023/Bournemouth-Stats"
+brentford = "https://fbref.com/en/squads/cd051869/2022-2023/Brentford-Stats"
+brighton = "https://fbref.com/en/squads/d07537b9/2022-2023/Brighton-and-Hove-Albion-Stats"
+chelsea = "https://fbref.com/en/squads/cff3d9bb/2022-2023/Chelsea-Stats"
+crystal_palace = "https://fbref.com/en/squads/47c64c55/2022-2023/Crystal-Palace-Stats"
+everton = "https://fbref.com/en/squads/d3fd31cc/2022-2023/Everton-Stats"
+fulham = "https://fbref.com/en/squads/fd962109/2022-2023/Fulham-Stats"
+leeds = "https://fbref.com/en/squads/5bfb9659/2022-2023/Leeds-United-Stats"
+leicester = "https://fbref.com/en/squads/a2d435b3/2022-2023/Leicester-City-Stats"
+liverpool = "https://fbref.com/en/squads/822bd0ba/2022-2023/Liverpool-Stats"
+man_city = "https://fbref.com/en/squads/b8fd03ef/2022-2023/Manchester-City-Stats"
+man_united = "https://fbref.com/en/squads/19538871/2022-2023/Manchester-United-Stats"
+newcastle = "https://fbref.com/en/squads/b2b47a98/2022-2023/Newcastle-United-Stats"
+nottingham_forest = "https://fbref.com/en/squads/e4a775cb/2022-2023/Nottingham-Forest-Stats"
+southampton = "https://fbref.com/en/squads/33c895d4/2022-2023/Southampton-Stats"
+tottenham = "https://fbref.com/en/squads/361ca564/2022-2023/Tottenham-Hotspur-Stats"
+west_ham = "https://fbref.com/en/squads/7c21e445/2022-2023/West-Ham-United-Stats"
+wolves = "https://fbref.com/en/squads/8cec06e1/2022-2023/Wolverhampton-Wanderers-Stats"
+
+premier_league_urls = c(arsenal, aston_villa, bournemouth, brentford, brighton, chelsea, crystal_palace, everton, fulham, leeds, leicester, liverpool, man_city, man_united, newcastle, nottingham_forest, southampton, tottenham, west_ham, wolves)
+
+premier_league_salaries = fb_squad_wages(team_url = premier_league_urls)
+```
+
+## Salary Data
+
+:::: {.columns}
+::: {.column width="50%"}
+
+```{r}
+#| code-line-numbers: "|3|4"
+premier_league_salaries  = premier_league_salaries |>
+  mutate(
+    Pos = str_sub(Pos, 1, 2),
+    Pos = factor(Pos, levels = c("GK", "DF", "MF", "FW"))
+  ) |>
+  filter(Pos != "")
+```
+:::
+
+
+::: {.column width="50%"}
+::: {.fragment}
+```{r}
+highest_earners = premier_league_salaries |>
+  group_by(Pos) |>
+  slice(which.max(AnnualWageUSD))
+```
+:::
+:::
+
+::::
+
+## Salary Data
+
+```{r}
+#| code-line-numbers: "|10|16"
+ggplot(premier_league_salaries, aes(x = AnnualWageUSD, y = Pos, color = Pos)) +
+  geom_point(size = 3) +
+  labs(
+  title = "Premier League '23 Salaries by Position",
+  x = "Salary (USD)",
+  y = "Position"
+  ) +
+  theme_minimal() +
+  geom_text(data = highest_earners, 
+            aes(label = paste(Player, Team, sep = "\n")),
+            vjust = 1.5,
+            color = "black",
+            size = 4.5
+            ) +
+  guides(color = "none") +
+  scale_x_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  expand_limits(x = 38000000, y = 0) +
+  theme_bw(base_size = 20)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
